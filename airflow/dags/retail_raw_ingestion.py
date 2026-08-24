@@ -6,7 +6,12 @@ from src.validation.raw_validation import (
 from datetime import datetime
 from pathlib import Path
 
-from airflow.sdk import DAG, task
+import requests
+
+from airflow.sdk import DAG, task, get_current_context
+from airflow.providers.databricks.operators.databricks import (
+    DatabricksRunNowOperator,
+)
 
 from src.extractors.retail_generator import (
     generate_customers,
@@ -17,7 +22,13 @@ from src.utils.file_utils import write_json
 
 
 RAW_BASE_PATH = "/opt/airflow/data/raw"
+DATABRICKS_CONN_ID = "databricks_default"
 
+DATABRICKS_VOLUME_PATH = (
+    "/Volumes/retail_lakehouse/landing/raw_files"
+)
+
+DATABRICKS_JOB_ID = 309402493559758
 
 with DAG(
     dag_id="retail_raw_ingestion",
@@ -211,6 +222,96 @@ with DAG(
                 f"{dataset['rows']} rows "
                 f"-> {dataset['path']}"
             )
+    @task
+    def upload_to_databricks(
+        customers: dict,
+        products: dict,
+        order_data: list[dict],
+    ) -> list[dict]:
+
+        context = get_current_context()
+
+        connection = context["conn"].get(
+            DATABRICKS_CONN_ID
+        )
+
+        host = connection.host.rstrip("/")
+        token = connection.password
+
+        datasets = [
+            customers,
+            products,
+            *order_data,
+        ]
+
+        uploaded_files = []
+
+        for dataset in datasets:
+
+            local_path = dataset["path"]
+            dataset_name = dataset["dataset"]
+
+            file_name = local_path.split("/")[-1]
+
+            volume_path = (
+                f"{DATABRICKS_VOLUME_PATH}/{file_name}"
+            )
+
+            upload_url = (
+                f"{host}"
+                f"/api/2.0/fs/files"
+                f"{volume_path}"
+                f"?overwrite=true"
+            )
+
+            print(
+                f"Uploading {local_path} "
+                f"to {volume_path}"
+            )
+
+            with open(local_path, "rb") as file:
+
+                response = requests.put(
+                    upload_url,
+                    headers={
+                        "Authorization": (
+                            f"Bearer {token}"
+                        ),
+                        "Content-Type": (
+                            "application/octet-stream"
+                        ),
+                    },
+                    data=file,
+                    timeout=120,
+                )
+
+            if response.status_code != 204:
+                raise RuntimeError(
+                    f"Upload failed for "
+                    f"{dataset_name}. "
+                    f"Status={response.status_code}, "
+                    f"response={response.text}"
+                )
+
+            uploaded_files.append(
+                {
+                    "dataset": dataset_name,
+                    "local_path": local_path,
+                    "volume_path": volume_path,
+                }
+            )
+
+            print(
+                f"Successfully uploaded "
+                f"{dataset_name}"
+            )
+
+        return uploaded_files
+    run_bronze_ingestion = DatabricksRunNowOperator(
+        task_id="run_bronze_ingestion",
+        databricks_conn_id=DATABRICKS_CONN_ID,
+        job_id=DATABRICKS_JOB_ID,
+    )
 
     run_directory = create_run_directory()
 
@@ -232,10 +333,20 @@ with DAG(
         order_result,
     )
 
+    uploaded_files = upload_to_databricks(
+        customer_result,
+        product_result,
+        order_result,
+    )
+
     summary = summarize_ingestion(
         customer_result,
         product_result,
         order_result,
     )
 
-    quality_check >> summary
+    quality_check >> uploaded_files
+
+    uploaded_files >> run_bronze_ingestion
+
+    run_bronze_ingestion >> summary
