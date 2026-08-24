@@ -1,0 +1,45 @@
+# Environment variables
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Airflow
+airflow/logs/*
+airflow/airflow.cfg
+airflow/airflow.db
+airflow/webserver_config.py
+
+# Keep required empty directories
+!airflow/logs/.gitkeep
+
+# Local data
+data/raw/*
+data/processed/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Credentials and secrets
+*.pem
+*.key
+credentials.json
+.databrickscfg
+
+# Databricks local metadata
+.databricks/
+
+# OS files
+.DS_Store
+Thumbs.db
