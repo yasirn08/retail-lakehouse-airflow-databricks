@@ -28,7 +28,10 @@ DATABRICKS_VOLUME_PATH = (
     "/Volumes/retail_lakehouse/landing/raw_files"
 )
 
-DATABRICKS_JOB_ID = 309402493559758
+DATABRICKS_JOB_ID_BRONZE = 309402493559758
+DATABRICKS_JOB_ID_SILVER = 697650079502500
+DATABRICKS_JOB_ID_GOLD = 733331664328043
+
 
 with DAG(
     dag_id="retail_raw_ingestion",
@@ -310,7 +313,17 @@ with DAG(
     run_bronze_ingestion = DatabricksRunNowOperator(
         task_id="run_bronze_ingestion",
         databricks_conn_id=DATABRICKS_CONN_ID,
-        job_id=DATABRICKS_JOB_ID,
+        job_id=DATABRICKS_JOB_ID_BRONZE,
+    )
+    run_silver_transformations = DatabricksRunNowOperator(
+        task_id="run_silver_transformations",
+        databricks_conn_id=DATABRICKS_CONN_ID,
+        job_id=DATABRICKS_JOB_ID_SILVER,
+    )
+    run_gold_model = DatabricksRunNowOperator(
+        task_id="run_gold_model",
+        databricks_conn_id=DATABRICKS_CONN_ID,
+        job_id=DATABRICKS_JOB_ID_GOLD,
     )
 
     run_directory = create_run_directory()
@@ -345,8 +358,12 @@ with DAG(
         order_result,
     )
 
-    quality_check >> uploaded_files
+quality_check >> uploaded_files
 
-    uploaded_files >> run_bronze_ingestion
+uploaded_files >> run_bronze_ingestion
 
-    run_bronze_ingestion >> summary
+run_bronze_ingestion >> run_silver_transformations
+
+run_silver_transformations >> run_gold_model
+
+run_gold_model >> summary

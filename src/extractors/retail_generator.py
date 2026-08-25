@@ -1,7 +1,6 @@
 import random
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
-
 
 CITIES = [
     "Islamabad",
@@ -11,7 +10,6 @@ CITIES = [
     "Quetta",
     "Faisalabad",
 ]
-
 CATEGORIES = [
     "Electronics",
     "Home",
@@ -31,7 +29,7 @@ def generate_customers(count: int = 100) -> list[dict]:
                 "customer_name": f"Customer {customer_id}",
                 "email": f"customer{customer_id}@example.com",
                 "city": random.choice(CITIES),
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
 
@@ -48,7 +46,7 @@ def generate_products(count: int = 50) -> list[dict]:
                 "product_name": f"Product {product_id}",
                 "category": random.choice(CATEGORIES),
                 "price": round(random.uniform(5, 1000), 2),
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
 
@@ -63,7 +61,7 @@ def generate_orders(
     orders = []
     order_items = []
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     for order_number in range(1, order_count + 1):
         order_id = str(uuid4())
@@ -107,4 +105,4 @@ def generate_orders(
                 }
             )
 
-    return orders, order_items
+    return orders, order_items;
